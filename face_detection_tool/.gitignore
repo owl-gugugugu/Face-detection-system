@@ -1,5 +1,5 @@
 .idea
 *.__pycache__/
 datasets/
-work_space/log/
+work_space/
 *.pyc
