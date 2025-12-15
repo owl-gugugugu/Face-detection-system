@@ -21,12 +21,14 @@ FaceRecognition_Core/
 │   │   └── lib/
 │   │       └── librknnrt.so    # 从 rknpu2/../aarch64/ 复制来 (注意是 ARM64 版)
 │   └── opencv/
-│       ├── include/            # 从 opencv-mobile 或 SDK 复制头文件文件夹
-│       │   └── opencv2/
-│       └── lib/                # 从 opencv-mobile 复制 .so 库
-│           ├── libopencv_core.so
-│           ├── libopencv_imgproc.so
-│           └── libopencv_imgcodecs.so
+│       ├── include/           # 直接把下载的 include 文件夹里的内容放这就行
+│       │   └── opencv4/       # 这里多了一层 opencv4
+│       │       └── opencv2/
+│       └── lib/               # 把下载的 lib 文件夹里的内容放这就行
+│           ├── cmake/
+│           ├── libopencv_core.a
+│           ├── libopencv_imgproc.a
+│           └── ...
 └── test_api.py                 # [可选] Python 测试脚本 (用于模拟后端调用)
 ```
 
@@ -90,6 +92,47 @@ mobileface 需要的是一个 112x112 大小的图像，因此 RetinaFace 的输
 根据数据流动要求可知，该部分应该实现**仿射变换**。
 
 注意指针传递：在 Python 和 C++ 之间传递图像时，**千万不要发生内存拷贝**。
+
+现在有现成的例子可参考：
+
+C++：face_detection/examples 目录下的两个目录文件的 cpp/ 部分
+
+python：model_trainning_part/mtcnn_pytorch/src/align_trans.py（人脸对齐算法）
+
+```bash
+align_trans.py 功能分析
+  核心函数：warp_and_crop_face()
+  face_img = warp_and_crop_face(
+      src_img,           # 原始图像
+      facial_pts,        # RetinaFace检测的5个关键点
+      reference_pts,     # 参考关键点（可选，有默认值）
+      crop_size=(112, 112),  # 输出尺寸，正好是MobileFaceNet的输入！
+      align_type='similarity'  # 对齐类型
+  )
+
+  完整工作流程
+  原始图像
+    ↓
+  RetinaFace检测
+    ↓
+  人脸框 + 5个关键点(左眼、右眼、鼻子、左嘴角、右嘴角)
+    ↓
+  align_trans.warp_and_crop_face()
+    ↓
+  对齐的112x112人脸图像
+    ↓
+  MobileFaceNet(已训练)
+    ↓
+  512维特征向量
+
+  关键优势
+  1. 标准化对齐：使用相似变换或仿射变换将人脸对齐到标准姿态
+  2. 尺寸匹配：默认输出112x112，完美匹配MobileFaceNet输入要求
+  3. 5点对齐：支持标准的5个关键点（眼、鼻、嘴），RetinaFace正好输出这些
+  4. 灵活性：支持自定义参考点和输出尺寸
+```
+
+
 
 ## 整体示例（伪代码）
 
@@ -177,7 +220,6 @@ extern "C" {
 ## CMakelist 编写
 
 用于告诉编译器如何把上面的 C++ 代码编译成 .so 文件
-
 
 
 
