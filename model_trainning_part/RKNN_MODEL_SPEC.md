@@ -412,3 +412,5 @@ plt.title('Aligned Face (112x112)')
 plt.axis('off')
 plt.show()
 ```
+
+
