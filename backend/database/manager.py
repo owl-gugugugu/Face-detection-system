@@ -1,13 +1,25 @@
 import sqlite3
 import numpy as np
+import os
 from typing import Optional, Dict, List, Union
+
+from backend.utils.password import hash_password
 
 
 class DatabaseManager:
     """数据库管理器类，负责处理所有数据库操作"""
 
-    def __init__(self, db_path: str = 'database.db'):
-        """初始化数据库连接"""
+    def __init__(self, db_path: str = None):
+        """初始化数据库连接
+
+        Args:
+            db_path: 数据库文件路径。如果为 None，则使用默认路径 backend/database/database.db
+        """
+        if db_path is None:
+            # 默认路径：backend/database/database.db
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            db_path = os.path.join(current_dir, 'database.db')
+
         # 添加 check_same_thread=False 以支持多线程访问
         # 后台线程和FastAPI请求会并发访问数据库
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -37,11 +49,21 @@ class DatabaseManager:
         self.conn.commit()
 
     def add_administrator(self, username: str, password: str) -> int:
-        """添加管理员"""
+        """添加管理员
+
+        Args:
+            username: 用户名
+            password: 明文密码（将自动 hash）
+
+        Returns:
+            新增记录的 ID
+        """
+        # 对密码进行 hash
+        hashed_password = hash_password(password)
         self.cursor.execute('''
             INSERT INTO administrators (username, password)
             VALUES (?, ?)
-        ''', (username, password))
+        ''', (username, hashed_password))
         self.conn.commit()
         return self.cursor.lastrowid
 
@@ -58,13 +80,23 @@ class DatabaseManager:
         return ""
 
     def update_administrator_password(self, username: str, new_password: str) -> bool:
-        """更新管理员密码"""
+        """更新管理员密码
+
+        Args:
+            username: 用户名
+            new_password: 新的明文密码（将自动 hash）
+
+        Returns:
+            成功返回 True，失败返回 False
+        """
         try:
+            # 对新密码进行 hash
+            hashed_password = hash_password(new_password)
             self.cursor.execute('''
                 UPDATE administrators
                 SET password = ?
                 WHERE username = ?
-            ''', (new_password, username))
+            ''', (hashed_password, username))
             self.conn.commit()
             return True
         except Exception as e:
