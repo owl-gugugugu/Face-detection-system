@@ -313,10 +313,11 @@ from pyexpat import features  # ❌ pyexpat 是 XML 解析器，这里不需要
 2. 严重问题：super().init() 重复调用
 
 位置: backend/core/backgroundThread.py:27-28
+```py
 def __init__(self, ...):
    super().__init__(target=self.run)  # ❌ 第一次调用
    super().__init__()                  # ❌ 第二次调用，覆盖了第一次的 target
-
+```
 问题说明：
 - 第二次调用会覆盖第一次设置的 target=self.run
 - 导致线程启动时没有目标函数
@@ -326,8 +327,9 @@ def __init__(self, ...):
 3. 设计问题：创建了新的数据库实例
 
 位置: backend/core/backgroundThread.py:34
+```py
 self.db_manager = manager.DatabaseManager()  # ❌ 新实例
-
+```
 问题说明：
 - 全局已有 db_manager 实例（第12行导入）
 - 创建新实例会导致多个数据库连接
@@ -337,8 +339,9 @@ self.db_manager = manager.DatabaseManager()  # ❌ 新实例
 4. 🔴 严重问题：近邻帧算法逻辑错误
 
 位置: backend/core/backgroundThread.py:74-93
-
+```py
 # 调用 face_engine 进行人脸识别获得512维特征向量
+
 results = face_engine.extract_feature(img_bytes)
 if results is not None:
    logging.info("识别到人脸")
@@ -352,6 +355,7 @@ db_results = db_manager.get_face_features()
 # 遍历数据库中的每个人脸特征，计算相似度
 for item in db_results:
    sim = face_engine.compute_similarity(results, item['feature_vector'])  # ❌ results 可能为 None！
+```
 
 问题说明：
 1. 如果 results 为 None（未检测到人脸），仍然会执行第83-93行
@@ -362,14 +366,14 @@ for item in db_results:
 5. 优化问题：缺少 prev_frame 更新
 
 位置: backend/core/backgroundThread.py:66-95
-
+```py
 if camera.detect_motion(prev_frame, frame, self.motion_threshold):
    logging.info("Move!")
    prev_frame = frame  # ✅ 更新了
    # ... 人脸识别逻辑
 
 time.sleep(self.check_interval)  # ❌ 循环结束，如果没有运动，prev_frame 不更新
-
+```
 问题说明：
 - 如果没有检测到运动，prev_frame 不会更新
 - 导致后续帧都与同一个旧帧比较
@@ -379,6 +383,7 @@ time.sleep(self.check_interval)  # ❌ 循环结束，如果没有运动，prev_
 6. camera.py 第三点问题：motion_threshold 参数命名
 
 正如我们之前讨论的，在 camera.py 中：
+```py
 def detect_motion(self, prevFrame, frame, motion_threshold):
    # motion_threshold 用于二值化阈值
    thresh = cv2.threshold(frame_delta, motion_threshold, 255, ...)
@@ -389,9 +394,12 @@ def __init__(self, ..., motion_threshold=500, ...):
 
 # 使用时
 camera.detect_motion(prev_frame, frame, self.motion_threshold)
-
+```
 问题：motion_threshold=500 作为二值化阈值太大了（应该是 25-50），可能是误用了轮廓面积阈值
 
+
+---
+### 后台线程原理介绍
   📚 后台线程人脸检测原理
 
   核心流程（近邻帧算法）
@@ -439,9 +447,9 @@ camera.detect_motion(prev_frame, frame, self.motion_threshold)
 🔧 关键参数详解
 
 1. check_interval (检查间隔)
-
+```py
 check_interval = 0.1  # 100ms，即每秒检查10次
-
+```
 作用：控制循环频率
 - 太小（如 0.01s）：CPU 占用高，帧处理跟不上
 - 太大（如 1s）：响应慢，用户体验差
@@ -453,10 +461,10 @@ check_interval = 0.1  # 100ms，即每秒检查10次
 当前代码中有两个不同的阈值混淆了：
 
 A) 二值化阈值 (Binary Threshold)
-
+```py
 # 在 camera.detect_motion() 中使用
 thresh = cv2.threshold(frame_delta, motion_threshold, 255, cv2.THRESH_BINARY)[1]
-
+```
 作用：判断像素差异是否足够大
 - 取值范围：0-255
 - 推荐值：25-50
@@ -464,14 +472,14 @@ thresh = cv2.threshold(frame_delta, motion_threshold, 255, cv2.THRESH_BINARY)[1]
 - 值越大，只有大幅度运动才会触发
 
 B) 轮廓面积阈值 (Contour Area Threshold)
-
+```py
 # 在 Camera 类中定义
 self.motion_contour_threshold = 500
 
 # 使用
 if cv2.contourArea(contour) > self.motion_contour_threshold:
    return True
-
+```
 作用：过滤小轮廓（如噪声、小虫飞过）
 - 取值范围：500-5000 像素
 - 推荐值：500-1000
@@ -480,14 +488,14 @@ if cv2.contourArea(contour) > self.motion_contour_threshold:
 
 ---
 🔴 当前代码的问题：
-
+```py
 def __init__(self, check_interval=0.1, motion_threshold=500, ...):
    self.motion_threshold = motion_threshold  # 500
 
 # 使用时
 camera.detect_motion(prev_frame, frame, self.motion_threshold)
 #                                        └─ 500 作为二值化阈值！❌
-
+```
 问题：motion_threshold=500 被用作二值化阈值（应该是 25-50），导致几乎检测不到运动！
 
 ---
@@ -574,3 +582,303 @@ for contour in contours:
 | motion_threshold         | 500    | ❌ 错误 | 25-50    | 当前被误用为二值化阈值 |
 | motion_contour_threshold | 500    | ✅ 合理 | 500-1000 | 在Camera类中正确使用   |
 | similarity_threshold     | 0.5    | ⚠️ 偏低 | 0.6-0.7  | 建议提高安全性         |
+
+---
+### 后台线程检测 `BackgroundThread` 优化
+
+关键改进
+
+1. ✅ 概念分离：二值化阈值和轮廓面积阈值分离，语义清晰
+2. ✅ 参数命名：binary_threshold 和 contour_threshold 更准确
+3. ✅ 默认值优化：
+  - 二值化阈值：50 → 25（更灵敏）
+  - 轮廓面积阈值：明确设置为 500
+  - 相似度阈值：0.5 → 0.6（更安全）
+4. ✅ 可配置性：可以独立调整两个阈值
+
+---
+运行流程示意
+
+帧差值 < 25 → 忽略（噪声）
+       ↓
+帧差值 ≥ 25 → 标记为运动像素
+       ↓
+形成轮廓，计算面积
+       ↓
+轮廓面积 < 500 → 忽略（小物体，如虫子）
+       ↓
+轮廓面积 ≥ 500 → 触发人脸识别
+       ↓
+识别成功，相似度 ≥ 0.6 → 开门
+
+----
+
+### 完整运行流程
+
+```bash
+启动线程
+   ↓
+设置 Camera 轮廓面积阈值 = 500
+   ↓
+while running:
+   ↓
+读取当前帧
+   ↓
+是否有前一帧？ No → 保存当前帧为前一帧，continue
+   ↓ Yes
+近邻帧运动检测（二值化阈值=25）
+   ↓
+检测到运动？ No → 更新 prev_frame，继续
+   ↓ Yes
+记录："Move!"
+   ↓
+将帧编码为 JPEG 字节流
+   ↓
+调用 FaceEngine.extract_feature()
+   ↓
+返回 512 维特征向量？ No → 记录"未识别到人脸"
+   ↓ Yes                          ↓
+记录"识别到人脸"                更新 prev_frame，继续
+   ↓
+从数据库获取所有人脸特征
+   ↓
+遍历计算余弦相似度
+   ↓
+相似度 > 0.5？ No → 继续遍历
+   ↓ Yes
+记录匹配用户和相似度
+   ↓
+调用 DoorController.open()
+   ↓
+记录"开锁"
+   ↓
+更新 prev_frame，继续循环
+```
+
+## DoorController.py 代码审查
+
+1. 严重问题：open() 方法缺少 return 语句
+
+位置: backend/core/doorController.py:26-46
+```py
+def open(self):
+   # 尝试获取锁，如果已被锁定则直接返回
+   if not self._door_lock.acquire(blocking=False):
+       logging.info("Door  is busy")
+       # ❌ 缺少 return！代码会继续执行到 try 块
+
+   try:
+       logging.info("Open the door")
+       # TODO: 调用 GPIO 控制开门的实际硬件操作
+       self.status = True
+       time.sleep(3)
+       # ...
+   finally:
+       self._door_lock.release()  # ❌ 如果没有获取到锁，release() 会报错！
+```
+问题说明：
+- 如果锁已被占用（acquire() 返回 False），记录日志后没有 return
+- 继续执行 try 块，但此时没有持有锁
+- finally 块中的 release() 会抛出异常：RuntimeError: release unlocked lock
+
+场景：
+线程A：正在开门（持有锁，sleep 3秒）
+线程B：尝试开门 → acquire 失败 → 记录"Door is busy" → ❌ 继续执行 → release 报错！
+
+---
+2. 设计问题：双重单例实现（冗余）
+
+位置: backend/core/doorController.py:9-17 和 52-64
+
+和 camera.py 一样，既有类级别单例（__new__ + _instance），又有模块级别单例（get_door_controller()）。
+
+说明：冗余但不影响功能，建议简化（但不是严重问题）
+
+---
+3. 代码质量问题：日志文字有多余空格
+
+位置: backend/core/doorController.py:29
+```py
+logging.info("Door  is busy")  # ❌ "Door" 后面有两个空格
+```
+---
+4. 参数未使用：new 和 init 的 status 参数
+
+位置: backend/core/doorController.py:12, 19
+```py
+def __new__(cls, status: bool = False):  # ❌ status 参数未使用
+   # ...
+
+def __init__(self, status: bool = False):
+   if not hasattr(self, '_initialized'):
+       self.status = status  # ✅ 使用了
+```
+问题说明：
+- __new__ 接收 status 参数但不使用
+- 实际使用是在 __init__ 中
+- 但 get_door_controller() 调用时没有传入参数，总是使用默认值 False
+
+建议：移除 __new__ 的 status 参数
+
+---
+✅ 做得好的地方：
+
+1. ✅ 双重检查锁定模式（DCL）实现正确
+2. ✅ 使用 _initialized 避免重复初始化
+3. ✅ 非阻塞锁获取（blocking=False）防止死锁
+4. ✅ finally 块确保锁释放（虽然有bug）
+5. ✅ 文档标注了 GPIO TODO
+6. ✅ 门状态管理（self.status）
+
+---
+📝 修复优先级：
+
+| 优先级 | 问题               | 影响                 |
+|--------|--------------------|----------------------|
+| 🔴 P0  | open() 缺少 return | 会导致程序崩溃       |
+| 🟢 P3  | 双重单例实现       | 代码冗余，不影响功能 |
+| 🟢 P3  | 日志多余空格       | 代码质量问题         |
+| 🟢 P3  | status 参数未使用  | 代码质量问题         |
+
+### 详细修复内容
+
+✅ 修复1：添加 return 语句（最严重）
+```py
+# 修复前
+def open(self):
+   if not self._door_lock.acquire(blocking=False):
+       logging.info("Door  is busy")
+       # ❌ 缺少 return，继续执行 try 块
+
+   try:
+       # ...
+   finally:
+       self._door_lock.release()  # ❌ 释放未持有的锁，报错！
+
+# 修复后
+def open(self):
+   if not self._door_lock.acquire(blocking=False):
+       logging.info("Door is busy")
+       return  # ✅ 立即返回
+
+   try:
+       logging.info("Open the door")
+       self.status = True
+       time.sleep(3)
+       logging.info("Close the door")
+       self.status = False
+   finally:
+       self._door_lock.release()  # ✅ 安全释放
+```
+场景对比：
+
+修复前（会崩溃）：
+
+线程A：door.open() → acquire(成功) → sleep(3秒)
+线程B：door.open() → acquire(失败) → 记录"Door is busy"
+                  → ❌ 继续执行 → try...finally
+                  → ❌ release() 未持有的锁
+                  → RuntimeError: release unlocked lock ☠️
+
+修复后（正常工作）：
+
+线程A：door.open() → acquire(成功) → sleep(3秒) → release()
+线程B：door.open() → acquire(失败) → 记录"Door is busy" → ✅ return
+
+---
+✅ 修复2：简化单例实现
+```py
+# 修复前：双重单例（冗余）
+class DoorController:
+   _instance = None
+   _lock = threading.Lock()
+
+   def __new__(cls, status: bool = False):
+       if not cls._instance:
+           with cls._lock:
+               if not cls._instance:
+                   cls._instance = super().__new__(cls)
+       return cls._instance
+
+   def __init__(self, status: bool = False):
+       if not hasattr(self, '_initialized'):
+           # ...
+
+# 修复后：只保留函数式单例
+class DoorController:
+   def __init__(self, status: bool = False):
+       if hasattr(self, '_initialized'):
+           return
+       self._initialized = True
+       # ...
+
+# 使用函数式单例
+def get_door_controller() -> DoorController:
+   global _door_controller_instance
+   if _door_controller_instance is None:
+       _door_controller_instance = DoorController()
+   return _door_controller_instance
+```
+优势：
+- 代码更简洁
+- 与 camera.py 保持一致
+- 避免复杂的双重检查锁定
+
+---
+🎯 DoorController 工作流程（修复后）
+```bash
+调用 door.open()
+   ↓
+尝试获取锁（非阻塞）
+   ↓
+已被占用？ Yes → 记录"Door is busy" → return（结束）
+   ↓ No
+获取锁成功
+   ↓
+记录"Open the door"
+   ↓
+设置 status = True
+   ↓
+GPIO 控制开门（TODO）
+   ↓
+sleep(3秒)
+   ↓
+记录"Close the door"
+   ↓
+设置 status = False
+   ↓
+GPIO 控制关门（TODO）
+   ↓
+finally: 释放锁
+   ↓
+完成
+```
+
+### 单元测试
+
+已添加测试的模块
+
+| 模块                | 测试数量 | 运行结果    | 说明                   |
+|---------------------|----------|-------------|------------------------|
+| doorController.py   | 5个测试  | ✅ 全部通过 | 不依赖硬件，可完全测试 |
+| camera.py           | 7个测试  | ⚠️ 需要硬件 | 需要摄像头和cv2模块    |
+| database/manager.py | 8个测试  | ✅ 已有测试 | 之前已添加             |
+
+---
+doorController.py 测试结果（✅ 全部通过）
+
+[Test 1] 单例模式测试                     [PASS]
+[Test 2] 初始化状态测试                   [PASS]
+[Test 3] 单次开门操作                     [PASS] (3.00秒)
+[Test 4] 并发开门测试（核心）             [PASS]
+  - 执行完整操作的线程: 1个
+  - 被阻塞返回的线程: 2个
+[Test 5] 锁释放测试                       [PASS]
+
+关键验证：
+- ✅ 单例模式工作正常
+- ✅ 开门时间正确（3秒）
+- ✅ 并发控制完美：3个线程同时开门，只有1个成功，其他2个被正确阻塞
+- ✅ 锁正确释放，可以连续开门
+
+
