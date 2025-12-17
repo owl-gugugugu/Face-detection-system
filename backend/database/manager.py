@@ -70,18 +70,56 @@ class DatabaseManager:
             return False
 
 
+    def get_face_name_list(self) -> List[str]:
+        """获取所有用户名列表"""
+        self.cursor.execute('''
+            SELECT name FROM face_features
+        ''')
+        rows = self.cursor.fetchall()
+        return [row[0] for row in rows]
 
-    def add_face_feature(self, name: str, feature_vector: np.ndarray) -> int:
+    def delete_face_name(self, name: str) -> bool:
+        """删除指定用户名的人脸特征向量"""
+        try:
+            self.cursor.execute('''
+                DELETE FROM face_features
+                WHERE name = ?
+            ''', name)
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"删除人脸特征向量失败: {e}")
+            return False
+
+    def delete_all_face_names(self) -> bool:
+        """删除所有用户名的人脸特征向量"""
+        try:
+            self.cursor.execute('''
+                DELETE FROM face_features
+            ''')
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"删除所有人脸特征向量失败: {e}")
+            return False
+
+
+
+    def add_face_feature(self, name: str, feature_vector: np.ndarray) -> bool:
         """添加人脸特征向量"""
         # 将numpy数组转换为二进制数据
         feature_blob = feature_vector.tobytes()
 
-        self.cursor.execute('''
-            INSERT INTO face_features (name, feature_vector)
-            VALUES (?, ?)
-        ''', (name, feature_blob))
-        self.conn.commit()
-        return self.cursor.lastrowid
+        try:
+            self.cursor.execute('''
+                INSERT INTO face_features (name, feature_vector)
+                VALUES (?, ?)
+            ''', (name, feature_blob))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"添加人脸特征向量失败: {e}")
+            return False
 
     def get_face_features(self) -> List[Dict]:
         """获取所有人脸特征向量"""
