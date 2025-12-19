@@ -108,7 +108,7 @@ class FaceEngine:
             raise RuntimeError("Failed to create FaceEngine instance")
 
         # 初始化模型（传入模型路径）
-        print(f"[FaceEngine] Initializing models...")
+        print("[FaceEngine] Initializing models...")
         print(f"  RetinaFace: {retinaface_model}")
         print(f"  MobileFaceNet: {mobilefacenet_model}")
 
@@ -160,7 +160,7 @@ class FaceEngine:
         # 处理返回值
         if ret == 0:
             # 成功：转换为 Python List
-            print(f"[FaceEngine] Feature extracted successfully")
+            print("[FaceEngine] Feature extracted successfully")
             return feature_512.tolist()
         elif ret == -1:
             # 未检测到人脸

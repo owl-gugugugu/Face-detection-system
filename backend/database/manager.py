@@ -257,7 +257,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"获取管理员失败: {type(e).__name__}: {e}")
         print(
-            f"   原因: execute() 第二个参数应该是元组 (username,) 而不是字符串 username"
+            "   原因: execute() 第二个参数应该是元组 (username,) 而不是字符串 username"
         )
 
     # 测试3: 添加人脸特征 - 使用 List (模拟 FaceEngine 返回值)
@@ -268,7 +268,7 @@ if __name__ == "__main__":
         print(f"添加人脸特征成功: {result}")
     except Exception as e:
         print(f"添加人脸特征失败: {type(e).__name__}: {e}")
-        print(f"   原因: List 没有 tobytes() 方法，需要先转换为 numpy 数组")
+        print("   原因: List 没有 tobytes() 方法，需要先转换为 numpy 数组")
 
     # 测试4: 添加人脸特征 - 使用 numpy 数组
     print("\n[测试4] 添加人脸特征 - 使用 numpy.ndarray")
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         print(f"删除成功: {result}")
     except Exception as e:
         print(f"删除失败: {type(e).__name__}: {e}")
-        print(f"   原因: execute() 第二个参数应该是元组 (name,) 而不是字符串 name")
+        print("   原因: execute() 第二个参数应该是元组 (name,) 而不是字符串 name")
 
     # 测试7: 删除所有人脸
     print("\n[测试7] 删除所有人脸")
@@ -310,7 +310,7 @@ if __name__ == "__main__":
         result = test_db.delete_all_face_names()
         print(f"删除空表返回: {result}")
         print(
-            f"   说明: 当前实现返回 False (表示空表), 但语义上应该返回 True (操作成功)"
+            "   说明: 当前实现返回 False (表示空表), 但语义上应该返回 True (操作成功)"
         )
     except Exception as e:
         print(f"删除空表失败: {type(e).__name__}: {e}")

@@ -84,7 +84,7 @@ class FaceEngine:
             raise RuntimeError("Failed to create FaceEngine instance")
 
         # 初始化模型
-        print(f"Initializing FaceEngine...")
+        print("Initializing FaceEngine...")
         print(f"  RetinaFace model: {retinaface_model}")
         print(f"  MobileFaceNet model: {mobilefacenet_model}")
 
@@ -229,18 +229,18 @@ def main():
         if feature2 is not None:
             similarity = engine.compare_faces(feature1, feature2)
             print(f"\n{'=' * 50}")
-            print(f"Face Comparison Result:")
+            print("Face Comparison Result:")
             print(f"  Image 1: {args.image}")
             print(f"  Image 2: {args.image2}")
             print(f"  Cosine Similarity: {similarity:.4f}")
             print(
                 f"  Judgment: {'Same person ✓' if similarity > 0.5 else 'Different person ✗'}"
             )
-            print(f"  (Threshold: 0.5 for strict, 0.3 for general)")
+            print("  (Threshold: 0.5 for strict, 0.3 for general)")
             print(f"{'=' * 50}")
     else:
         # 只提取特征，打印前10个值作为示例
-        print(f"\nFeature vector (first 10 values):")
+        print("\nFeature vector (first 10 values):")
         print(f"  {feature1[:10]}")
 
     print("\n✓ Test completed successfully!")

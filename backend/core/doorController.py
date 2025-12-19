@@ -110,7 +110,7 @@ if __name__ == "__main__":
         print(f"开门完成，耗时: {elapsed:.2f}秒")
 
         if 3.0 <= elapsed <= 3.5:
-            print(f"[PASS] 开门时间正确（约3秒）")
+            print("[PASS] 开门时间正确（约3秒）")
         else:
             print(f"[WARN] 开门时间异常：{elapsed:.2f}秒")
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         if len(long_tasks) == 1 and len(short_tasks) == 2:
             print("[PASS] 并发控制正确：只有1个线程执行了开门，其他2个被阻塞")
         else:
-            print(f"[FAIL] 并发控制异常")
+            print("[FAIL] 并发控制异常")
 
     except Exception as e:
         print(f"[FAIL] {type(e).__name__}: {e}")

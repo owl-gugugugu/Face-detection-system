@@ -45,29 +45,29 @@ class Camera:
         # 根据模式初始化摄像头
         if mode == "gstreamer":
             # 强制使用 GStreamer 模式
-            logging.info(f"[Camera] 强制使用 GStreamer 模式")
+            logging.info("[Camera] 强制使用 GStreamer 模式")
             success = self._init_gstreamer(index)
             if not success:
-                raise ValueError(f"Failed to open camera in GStreamer mode")
+                raise ValueError("Failed to open camera in GStreamer mode")
 
         elif mode == "opencv":
             # 强制使用 OpenCV 模式
-            logging.info(f"[Camera] 强制使用 OpenCV 模式")
+            logging.info("[Camera] 强制使用 OpenCV 模式")
             success = self._init_opencv(index)
             if not success:
-                raise ValueError(f"Failed to open camera in OpenCV mode")
+                raise ValueError("Failed to open camera in OpenCV mode")
 
         elif mode == "auto":
             # 自动模式：优先 GStreamer，失败则降级到 OpenCV
-            logging.info(f"[Camera] 自动模式：优先尝试 GStreamer")
+            logging.info("[Camera] 自动模式：优先尝试 GStreamer")
             success = self._init_gstreamer(index)
 
             if not success:
-                logging.warning(f"[Camera] GStreamer 初始化失败，降级到 OpenCV 模式")
+                logging.warning("[Camera] GStreamer 初始化失败，降级到 OpenCV 模式")
                 success = self._init_opencv(index)
 
             if not success:
-                raise ValueError(f"Failed to open camera in any mode")
+                raise ValueError("Failed to open camera in any mode")
 
         else:
             raise ValueError(
@@ -76,7 +76,7 @@ class Camera:
 
         # 验证摄像头已成功打开
         if self.cap is None or not self.cap.isOpened():
-            raise ValueError(f"Camera initialization failed")
+            raise ValueError("Camera initialization failed")
 
         # 验证实际设置的分辨率
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -84,7 +84,7 @@ class Camera:
         actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
 
         # 打印摄像头信息
-        logging.info(f"[Camera] Camera opened successfully")
+        logging.info("[Camera] Camera opened successfully")
         logging.info(f"[Camera]   Mode:      {self.actual_mode}")
         logging.info(f"[Camera]   Device:    /dev/video{index}")
         logging.info(
@@ -124,26 +124,26 @@ class Camera:
                 index=index, width=CAMERA_WIDTH, height=CAMERA_HEIGHT, fps=CAMERA_FPS
             )
 
-            logging.info(f"[Camera] Trying GStreamer pipeline:")
+            logging.info("[Camera] Trying GStreamer pipeline:")
             logging.info(f"[Camera]   {pipeline}")
 
             # 尝试打开 GStreamer 管道
             self.cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
             if not self.cap.isOpened():
-                logging.warning(f"[Camera] GStreamer pipeline failed to open")
+                logging.warning("[Camera] GStreamer pipeline failed to open")
                 return False
 
             # 尝试读取一帧验证
             ret, frame = self.cap.read()
             if not ret or frame is None:
-                logging.warning(f"[Camera] GStreamer opened but cannot read frames")
+                logging.warning("[Camera] GStreamer opened but cannot read frames")
                 self.cap.release()
                 self.cap = None
                 return False
 
             self.actual_mode = "gstreamer"
-            logging.info(f"[Camera] GStreamer mode initialized successfully")
+            logging.info("[Camera] GStreamer mode initialized successfully")
             return True
 
         except Exception as e:
