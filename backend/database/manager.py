@@ -4,6 +4,7 @@ import os
 from typing import Optional, Dict, List, Union
 
 from backend.utils.password import hash_password
+from backend.config import DATABASE_PATH, DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD
 
 
 class DatabaseManager:
@@ -13,12 +14,11 @@ class DatabaseManager:
         """初始化数据库连接
 
         Args:
-            db_path: 数据库文件路径。如果为 None，则使用默认路径 backend/database/database.db
+            db_path: 数据库文件路径。如果为 None，则使用配置文件中的路径
         """
         if db_path is None:
-            # 默认路径：backend/database/database.db
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.join(current_dir, 'database.db')
+            # 使用配置文件中的路径
+            db_path = DATABASE_PATH
 
         # 添加 check_same_thread=False 以支持多线程访问
         # 后台线程和FastAPI请求会并发访问数据库
@@ -200,14 +200,13 @@ db_manager = DatabaseManager()
 def init_database():
     """初始化数据库，创建默认管理员"""
     # 检查是否已有管理员
-    admin = db_manager.get_administrator('admin')
+    admin = db_manager.get_administrator(DEFAULT_ADMIN_USERNAME)
     if not admin:
-        default_password = '123456'
         db_manager.add_administrator(
-            username='admin',
-            password=default_password,
+            username=DEFAULT_ADMIN_USERNAME,
+            password=DEFAULT_ADMIN_PASSWORD,
         )
-        print("默认管理员已创建：用户名=admin, 密码=123456")
+        print(f"默认管理员已创建：用户名={DEFAULT_ADMIN_USERNAME}, 密码={DEFAULT_ADMIN_PASSWORD}")
 
 
 if __name__ == '__main__':

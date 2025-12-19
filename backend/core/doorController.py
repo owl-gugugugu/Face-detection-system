@@ -3,6 +3,8 @@ import threading
 import time
 from typing import Optional
 
+from backend.config import DOOR_OPEN_DURATION
+
 
 class DoorController:
     '''门控制器类'''
@@ -25,15 +27,15 @@ class DoorController:
         # 尝试获取锁，如果已被锁定则直接返回
         if not self._door_lock.acquire(blocking=False):
             logging.info("Door is busy")
-            return 
+            return
 
         try:
             logging.info("Open the door")
             # TODO: 调用 GPIO 控制开门的实际硬件操作
             self.status = True
 
-            # 保持门打开3秒
-            time.sleep(3)
+            # 保持门打开指定时间（从配置文件读取）
+            time.sleep(DOOR_OPEN_DURATION)
 
             # 执行关锁操作
             logging.info("Close the door")

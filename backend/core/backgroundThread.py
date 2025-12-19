@@ -8,6 +8,12 @@ from backend.core import doorController
 from backend.core.camera import get_camera
 from backend.core.face_engine import get_face_engine
 from backend.database.manager import db_manager
+from backend.config import (
+    CHECK_INTERVAL,
+    BINARY_THRESHOLD,
+    CONTOUR_THRESHOLD,
+    SIMILARITY_THRESHOLD
+)
 
 '''
     后台线程，用于持续读取摄像头帧处理日常任务
@@ -17,18 +23,21 @@ class BackgroundThread(threading.Thread):
     '''
         初始化后台线程
         Args:
-            check_interval: 检查间隔时间（秒），默认100ms
-            binary_threshold: 二值化阈值，用于帧差检测，默认25（取值范围0-255）
-            contour_threshold: 轮廓面积阈值，过滤小运动，默认500（像素面积）
-            similarity_threshold: 人脸识别相似度阈值，默认0.5
+            check_interval: 检查间隔时间（秒），默认从配置文件读取
+            binary_threshold: 二值化阈值，用于帧差检测，默认从配置文件读取
+            contour_threshold: 轮廓面积阈值，过滤小运动，默认从配置文件读取
+            similarity_threshold: 人脸识别相似度阈值，默认从配置文件读取
     '''
-    def __init__(self, check_interval=0.1, binary_threshold=25, contour_threshold=500, similarity_threshold=0.5):
-        super().__init__(target=self.run)   
+    def __init__(self, check_interval=None, binary_threshold=None, contour_threshold=None, similarity_threshold=None):
+        super().__init__(target=self.run)
         self.daemon = True  # 设置为守护线程，主程序退出时自动结束
-        self.check_interval = check_interval
-        self.binary_threshold = binary_threshold        # 二值化阈值（用于 detect_motion）
-        self.contour_threshold = contour_threshold      # 轮廓面积阈值
-        self.similarity_threshold = similarity_threshold
+
+        # 使用配置文件中的值作为默认值
+        self.check_interval = check_interval if check_interval is not None else CHECK_INTERVAL
+        self.binary_threshold = binary_threshold if binary_threshold is not None else BINARY_THRESHOLD
+        self.contour_threshold = contour_threshold if contour_threshold is not None else CONTOUR_THRESHOLD
+        self.similarity_threshold = similarity_threshold if similarity_threshold is not None else SIMILARITY_THRESHOLD
+
         self.running = False  # 线程运行状态标志
         # 使用全局 db_manager 实例，避免创建多个数据库连接
         self.door_lock = doorController.get_door_controller()

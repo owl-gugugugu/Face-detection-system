@@ -4,10 +4,8 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-# JWT 配置
-SECRET_KEY = "your-secret-key-change-in-production"  # 生产环境应该从环境变量读取
-ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24  # token 有效期 24 小时
+# 从配置文件导入 JWT 配置
+from backend.config import JWT_SECRET_KEY, JWT_ALGORITHM, JWT_EXPIRE_HOURS
 
 
 def create_access_token(username: str) -> str:
@@ -20,13 +18,13 @@ def create_access_token(username: str) -> str:
         JWT token 字符串
     """
     now = datetime.now(timezone.utc)
-    expire = now + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    expire = now + timedelta(hours=JWT_EXPIRE_HOURS)
     payload = {
         "sub": username,  # subject - 用户名
         "exp": expire,    # expiration - 过期时间
         "iat": now  # issued at - 签发时间
     }
-    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return token
 
 
@@ -40,7 +38,7 @@ def verify_token(token: str) -> Optional[str]:
         如果验证成功，返回用户名；否则返回 None
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             return None

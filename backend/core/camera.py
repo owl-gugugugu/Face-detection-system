@@ -3,22 +3,209 @@ from typing import Optional
 
 import cv2
 
-class Camera:
-    '''摄像头管理类'''
+from backend.config import (
+    CAMERA_INDEX,
+    CAMERA_MODE,
+    GSTREAMER_PIPELINE,
+    CAMERA_FALLBACK_INDICES,
+    CAMERA_WIDTH,
+    CAMERA_HEIGHT,
+    CAMERA_FPS,
+    MOTION_CONTOUR_THRESHOLD
+)
 
-    def __init__(self, index=0):
-        '''初始化函数，打开相机'''
+class Camera:
+    '''摄像头管理类 - 支持 GStreamer 和 OpenCV 双模切换'''
+
+    def __init__(self, index=None, mode=None):
+        '''初始化函数，打开相机
+
+        Args:
+            index: 摄像头设备索引，None 则使用配置文件默认值
+            mode: 初始化模式，None 则使用配置文件默认值
+                  可选值: 'auto', 'gstreamer', 'opencv'
+        '''
         # 添加初始化标志，避免单例模式下重复初始化
         if hasattr(self, '_initialized'):
             return
         self._initialized = True
 
+        # 使用配置文件中的默认值
+        if index is None:
+            index = CAMERA_INDEX
+        if mode is None:
+            mode = CAMERA_MODE
+
         self.index = index
-        self.cap = cv2.VideoCapture(index)
-        if not self.cap.isOpened():
-            raise ValueError(f"Failed to open camera{index}")
+        self.mode = mode
+        self.cap = None
+        self.actual_mode = None  # 记录实际使用的模式
+
+        # 根据模式初始化摄像头
+        if mode == 'gstreamer':
+            # 强制使用 GStreamer 模式
+            logging.info(f"[Camera] 强制使用 GStreamer 模式")
+            success = self._init_gstreamer(index)
+            if not success:
+                raise ValueError(f"Failed to open camera in GStreamer mode")
+
+        elif mode == 'opencv':
+            # 强制使用 OpenCV 模式
+            logging.info(f"[Camera] 强制使用 OpenCV 模式")
+            success = self._init_opencv(index)
+            if not success:
+                raise ValueError(f"Failed to open camera in OpenCV mode")
+
+        elif mode == 'auto':
+            # 自动模式：优先 GStreamer，失败则降级到 OpenCV
+            logging.info(f"[Camera] 自动模式：优先尝试 GStreamer")
+            success = self._init_gstreamer(index)
+
+            if not success:
+                logging.warning(f"[Camera] GStreamer 初始化失败，降级到 OpenCV 模式")
+                success = self._init_opencv(index)
+
+            if not success:
+                raise ValueError(f"Failed to open camera in any mode")
+
+        else:
+            raise ValueError(f"Invalid camera mode: {mode}. Must be 'auto', 'gstreamer' or 'opencv'")
+
+        # 验证摄像头已成功打开
+        if self.cap is None or not self.cap.isOpened():
+            raise ValueError(f"Camera initialization failed")
+
+        # 验证实际设置的分辨率
+        actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+
+        # 打印摄像头信息
+        logging.info(f"[Camera] Camera opened successfully")
+        logging.info(f"[Camera]   Mode:      {self.actual_mode}")
+        logging.info(f"[Camera]   Device:    /dev/video{index}")
+        logging.info(f"[Camera]   Requested: {CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {CAMERA_FPS}fps")
+        logging.info(f"[Camera]   Actual:    {actual_width}x{actual_height} @ {actual_fps}fps")
+
+        # 如果实际分辨率与请求不一致，发出警告
+        if actual_width != CAMERA_WIDTH or actual_height != CAMERA_HEIGHT:
+            logging.warning(
+                f"[Camera] Resolution mismatch! "
+                f"Requested {CAMERA_WIDTH}x{CAMERA_HEIGHT}, got {actual_width}x{actual_height}"
+            )
+
+        # 存储实际分辨率供后续使用
+        self.width = actual_width
+        self.height = actual_height
+        self.fps = actual_fps
+
         # 初始化移动监测所需的变量
-        self.motion_contour_threshold = 500  # 轮廓面积阈值，用于判断是否有显著运动
+        self.motion_contour_threshold = MOTION_CONTOUR_THRESHOLD
+
+    def _init_gstreamer(self, index):
+        """使用 GStreamer 硬件加速管道初始化摄像头
+
+        Args:
+            index: 设备索引
+
+        Returns:
+            bool: 成功返回 True，失败返回 False
+        """
+        try:
+            # 构建 GStreamer 管道字符串
+            pipeline = GSTREAMER_PIPELINE.format(
+                index=index,
+                width=CAMERA_WIDTH,
+                height=CAMERA_HEIGHT,
+                fps=CAMERA_FPS
+            )
+
+            logging.info(f"[Camera] Trying GStreamer pipeline:")
+            logging.info(f"[Camera]   {pipeline}")
+
+            # 尝试打开 GStreamer 管道
+            self.cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+
+            if not self.cap.isOpened():
+                logging.warning(f"[Camera] GStreamer pipeline failed to open")
+                return False
+
+            # 尝试读取一帧验证
+            ret, frame = self.cap.read()
+            if not ret or frame is None:
+                logging.warning(f"[Camera] GStreamer opened but cannot read frames")
+                self.cap.release()
+                self.cap = None
+                return False
+
+            self.actual_mode = 'gstreamer'
+            logging.info(f"[Camera] GStreamer mode initialized successfully")
+            return True
+
+        except Exception as e:
+            logging.warning(f"[Camera] GStreamer initialization exception: {e}")
+            if self.cap is not None:
+                self.cap.release()
+                self.cap = None
+            return False
+
+    def _init_opencv(self, index):
+        """使用标准 OpenCV V4L2 初始化摄像头
+
+        Args:
+            index: 设备索引（可以是单个索引或列表）
+
+        Returns:
+            bool: 成功返回 True，失败返回 False
+        """
+        # 如果指定了单个索引，只尝试该索引
+        # 否则尝试配置文件中的所有索引
+        if index is not None and index != CAMERA_INDEX:
+            indices_to_try = [index]
+        else:
+            indices_to_try = CAMERA_FALLBACK_INDICES
+
+        logging.info(f"[Camera] Trying OpenCV V4L2 mode with indices: {indices_to_try}")
+
+        for idx in indices_to_try:
+            try:
+                logging.info(f"[Camera] Trying /dev/video{idx} ...")
+
+                # 尝试打开设备
+                self.cap = cv2.VideoCapture(idx)
+
+                if not self.cap.isOpened():
+                    logging.debug(f"[Camera]   /dev/video{idx} cannot open")
+                    continue
+
+                # 设置分辨率和帧率
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+                self.cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
+
+                # 尝试读取一帧验证
+                ret, frame = self.cap.read()
+                if not ret or frame is None:
+                    logging.debug(f"[Camera]   /dev/video{idx} cannot read frames")
+                    self.cap.release()
+                    self.cap = None
+                    continue
+
+                # 成功
+                self.index = idx  # 更新实际使用的索引
+                self.actual_mode = 'opencv'
+                logging.info(f"[Camera] OpenCV mode initialized successfully on /dev/video{idx}")
+                return True
+
+            except Exception as e:
+                logging.debug(f"[Camera]   /dev/video{idx} exception: {e}")
+                if self.cap is not None:
+                    self.cap.release()
+                    self.cap = None
+                continue
+
+        logging.warning(f"[Camera] OpenCV mode failed on all indices: {indices_to_try}")
+        return False
 
     '''析构函数，释放相机资源'''
     def __del__(self):
@@ -32,6 +219,18 @@ class Camera:
             logging.error("Failed to read frame from camera")
             return None
         return frame
+
+    '''获取摄像头信息'''
+    def get_info(self):
+        """返回摄像头的详细信息"""
+        return {
+            'index': self.index,
+            'mode': self.actual_mode,  # 实际使用的模式
+            'width': self.width,
+            'height': self.height,
+            'fps': self.fps,
+            'backend': self.cap.getBackendName() if hasattr(self.cap, 'getBackendName') else 'unknown'
+        }
 
     '''移动监测'''
     def detect_motion(self, prevFrame, frame, binary_threshold):
