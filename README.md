@@ -36,7 +36,7 @@
 
 ## 📁 项目结构
 
-```
+```shell
 SmartGate-App/
 ├── backend/                # 后端服务
 │   ├── main.py            # FastAPI 应用入口
@@ -170,7 +170,7 @@ sudo nano /etc/systemd/system/smartgate.service
 
 本系统采用 **RetinaFace + MobileFaceNet** 的工业级人脸识别方案：
 
-```
+```shell
 JPEG 图片 (任意尺寸)
     ↓
 [1. 图像解码] → cv::Mat (BGR)
@@ -228,7 +228,7 @@ MIN_FACE_SIZE = 40      // 最小人脸尺寸(像素)
 
 ### 模块架构
 
-```
+```shell
 ┌─────────────────────────────────┐
 │  Layer 3: FastAPI 路由层        │  ← 业务逻辑
 │  - HTTP 接口                     │
@@ -327,15 +327,19 @@ SERVER_PORT = 8000         # 端口号
 ## 🐛 常见问题
 
 **Q: 422 Unprocessable Entity 错误？**
+
 A: 前后端数据格式不匹配，确保后端使用 Pydantic 模型接收 JSON。
 
 **Q: 视频流显示灰色画面？**
+
 A: 开发模式下 Mock 摄像头会显示灰色+文字，这是正常的。
 
 **Q: 人脸识别失败？**
+
 A: 生产模式下检查摄像头连接和 `.so` 库是否正确加载。
 
 **Q: 如何修改默认密码？**
+
 A: 修改 `config.py` 中的 `DEFAULT_ADMIN_PASSWORD`，重新初始化数据库。
 
 更多问题参考：[前后端集成文档 - 常见问题](docs/前后端集成文档.md#7-常见问题)
