@@ -70,6 +70,13 @@ int align_face(image_buffer_t *src_img, point_t landmarks[5], image_buffer_t *al
     Mat aligned_face_rgb;
     cvtColor(aligned_face_bgr, aligned_face_rgb, COLOR_BGR2RGB);
 
+    // 【调试代码】保存对齐后的人脸，用于检查数据是否正确
+    // 注意：保存时需要转回BGR，因为imwrite期望BGR格式
+    Mat debug_aligned_bgr;
+    cvtColor(aligned_face_rgb, debug_aligned_bgr, COLOR_RGB2BGR);
+    imwrite("debug_aligned_face_112x112.jpg", debug_aligned_bgr);
+    printf("[face_aligner] DEBUG: Saved aligned face to debug_aligned_face_112x112.jpg\n");
+
     // 7. 分配输出缓冲区
     int output_size = MOBILEFACENET_INPUT_SIZE * MOBILEFACENET_INPUT_SIZE * 3;
     aligned_face->width = MOBILEFACENET_INPUT_SIZE;

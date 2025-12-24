@@ -121,6 +121,30 @@ int face_engine_extract_feature(face_engine_t *engine, unsigned char *jpeg_data,
     // 使用第一个检测到的人脸
     retinaface_object_t *face_obj = &detect_result.objects[0];
 
+    // 【调试代码】保存RetinaFace检测结果（带人脸框和关键点）
+    Mat debug_img = img_bgr.clone();
+    // 画人脸框
+    rectangle(debug_img,
+              Point(face_obj->box.left, face_obj->box.top),
+              Point(face_obj->box.right, face_obj->box.bottom),
+              Scalar(0, 255, 0), 2);
+    // 画5个关键点
+    for (int i = 0; i < 5; i++) {
+        circle(debug_img,
+               Point(face_obj->landmarks[i].x, face_obj->landmarks[i].y),
+               3, Scalar(0, 0, 255), -1);
+    }
+    imwrite("debug_retinaface_detection.jpg", debug_img);
+    printf("[face_engine] DEBUG: RetinaFace detection saved to debug_retinaface_detection.jpg\n");
+    printf("[face_engine] DEBUG: Face box: (%d,%d) -> (%d,%d)\n",
+           face_obj->box.left, face_obj->box.top,
+           face_obj->box.right, face_obj->box.bottom);
+    printf("[face_engine] DEBUG: Landmarks: ");
+    for (int i = 0; i < 5; i++) {
+        printf("(%d,%d) ", face_obj->landmarks[i].x, face_obj->landmarks[i].y);
+    }
+    printf("\n");
+
     // ========================================
     // 3. 人脸对齐
     // ========================================
