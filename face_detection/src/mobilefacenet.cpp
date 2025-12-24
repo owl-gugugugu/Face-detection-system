@@ -121,31 +121,52 @@ int inference_mobilefacenet_model(rknn_app_context_t *app_ctx, image_buffer_t *a
 
     // 【调试代码】
     uint8_t* pixel_data = (uint8_t*)aligned_face->virt_addr;
-    printf("[mobilefacenet] DEBUG：Input pixels: %d %d %d %d %d ...\n", 
+    printf("[mobilefacenet] DEBUG：Input pixels (UINT8): %d %d %d %d %d ...\n",
     pixel_data[0], pixel_data[1], pixel_data[2], pixel_data[100], pixel_data[101]);
-    // 1. 设置输入
+
+    // 1. 预处理：将UINT8 [0-255] 转换为 FLOAT32 [-1, 1]
+    // 公式：output = (input - 127.5) / 127.5
+    int total_pixels = aligned_face->width * aligned_face->height * aligned_face->channel;
+    float* normalized_data = (float*)malloc(total_pixels * sizeof(float));
+    if (!normalized_data) {
+        printf("[mobilefacenet] Error: Failed to allocate memory for normalized data\n");
+        return -1;
+    }
+
+    uint8_t* src_data = (uint8_t*)aligned_face->virt_addr;
+    for (int i = 0; i < total_pixels; i++) {
+        normalized_data[i] = (src_data[i] - 127.5f) / 127.5f;
+    }
+
+    printf("[mobilefacenet] DEBUG：Normalized pixels (FLOAT32): %.4f %.4f %.4f %.4f %.4f ...\n",
+           normalized_data[0], normalized_data[1], normalized_data[2],
+           normalized_data[100], normalized_data[101]);
+
+    // 2. 设置输入
     rknn_input inputs[1];
     memset(inputs, 0, sizeof(inputs));
     inputs[0].index = 0;
-    inputs[0].type = RKNN_TENSOR_UINT8;
+    inputs[0].type = RKNN_TENSOR_FLOAT32;  // 改为 FLOAT32
     inputs[0].fmt = RKNN_TENSOR_NHWC;
-    inputs[0].size = aligned_face->size;
-    inputs[0].buf = aligned_face->virt_addr;
+    inputs[0].size = total_pixels * sizeof(float);
+    inputs[0].buf = normalized_data;
 
     ret = rknn_inputs_set(app_ctx->rknn_ctx, app_ctx->io_num.n_input, inputs);
     if (ret < 0) {
         printf("[mobilefacenet] Error: rknn_inputs_set failed! ret=%d\n", ret);
+        free(normalized_data);  // 释放内存
         return -1;
     }
 
-    // 2. 运行推理
+    // 3. 运行推理
     ret = rknn_run(app_ctx->rknn_ctx, NULL);
     if (ret < 0) {
         printf("[mobilefacenet] Error: rknn_run failed! ret=%d\n", ret);
+        free(normalized_data);  // 释放内存
         return -1;
     }
 
-    // 3. 获取输出
+    // 4. 获取输出
     rknn_output outputs[1];
     memset(outputs, 0, sizeof(outputs));
     outputs[0].index = 0;
@@ -154,28 +175,34 @@ int inference_mobilefacenet_model(rknn_app_context_t *app_ctx, image_buffer_t *a
     ret = rknn_outputs_get(app_ctx->rknn_ctx, app_ctx->io_num.n_output, outputs, NULL);
     if (ret < 0) {
         printf("[mobilefacenet] Error: rknn_outputs_get failed! ret=%d\n", ret);
+        free(normalized_data);  // 释放内存
         return -1;
     }
 
-    // 4. 拷贝特征向量（512维）
+    // 5. 拷贝特征向量（512维）
     float *output_data = (float *)outputs[0].buf;
     memcpy(out_result->embedding, output_data, 512 * sizeof(float));
     out_result->is_valid = 1;
 
-    // 5. 可选：L2 归一化（确保单位向量）
+    // 6. L2 归一化（注意：由于PyTorch模型已经做了归一化，这里计算的norm应该约为1.0）
     float norm = 0.0f;
     for (int i = 0; i < 512; i++) {
         norm += out_result->embedding[i] * out_result->embedding[i];
     }
     norm = sqrtf(norm);
+    printf("[mobilefacenet] DEBUG: Raw feature norm BEFORE normalization = %.4f\n", norm);
+
     if (norm > 1e-6f) {
         for (int i = 0; i < 512; i++) {
             out_result->embedding[i] /= norm;
         }
     }
 
-    // 6. 释放输出
+    // 7. 释放输出
     rknn_outputs_release(app_ctx->rknn_ctx, app_ctx->io_num.n_output, outputs);
+
+    // 8. 释放归一化数据内存
+    free(normalized_data);
 
     return 0;
 }
