@@ -1,7 +1,6 @@
 import logging
 import threading
 import time
-from collections import deque
 
 import cv2
 
